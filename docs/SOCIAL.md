@@ -43,7 +43,7 @@ judges; X/Twitter if you prefer brevity.
 > off is a feature you can't evaluate.
 >
 > Full write-up, benchmark harness and eleven pages of developer feedback on
-> GSQL and Savanna in the repo: [LINK]
+> GSQL and Savanna in the repo: https://github.com/harshvardhan0303/agentic-graphrag-tigergraph
 >
 > #TigerGraph #GraphRAG #KnowledgeGraphs #AgenticAI #RAG
 
@@ -99,13 +99,13 @@ judges; X/Twitter if you prefer brevity.
 > Repo, benchmark harness, and 11 pages of GSQL/Savanna developer feedback
 > (unordered vertex sets cost me 50 minutes and a wrong answer):
 >
-> [LINK]
+> https://github.com/harshvardhan0303/agentic-graphrag-tigergraph
 
 ---
 
 ## Notes before posting
 
-- Replace `[LINK]` with the public GitHub URL.
+- Replace `https://github.com/harshvardhan0303/agentic-graphrag-tigergraph` with the public GitHub URL.
 - Verify the three headline numbers against the final `out/public/summary.json` —
   they shift by a point between runs.
 - On LinkedIn, tag the **TigerGraph company page** rather than typing the text

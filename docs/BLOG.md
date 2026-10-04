@@ -287,7 +287,10 @@ make oracle        # graph correctness gate: expects 100/100
 make bench-public  # the table above
 ```
 
-Repo: *(link)* · Built on TigerGraph Savanna with pyTigerGraph and Gemini.
+Repo: https://github.com/harshvardhan0303/agentic-graphrag-tigergraph
+Live dashboard: https://harshvardhan0303.github.io/agentic-graphrag-tigergraph/
+
+Built on TigerGraph Savanna with pyTigerGraph and Gemini.
 
 *The detailed developer feedback — eleven specific friction points with repros,
 from `CREATE SECRET` to unordered vertex sets — is in `docs/FEEDBACK.md`.*
