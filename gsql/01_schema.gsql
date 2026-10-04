@@ -1,0 +1,88 @@
+// ---------------------------------------------------------------------------
+// Agentic GraphRAG -- graph schema
+//
+// Design notes
+//   * Event is the reasoning hub. Every benchmark question resolves to one or
+//     more Event vertices, so competitors/nations live as typed INTs on the
+//     vertex (not as text) to make aggregation and superlative queries exact.
+//   * Games.PRECEDES is a first-class edge built from the infobox prev/next
+//     fields. Temporal questions ("the Olympics held immediately before 2016")
+//     are a single hop along it instead of an LLM guess.
+//   * Chunk carries the embedding. Document/Chunk keep the corpus text
+//     addressable for citations and for the plain-RAG baseline.
+// ---------------------------------------------------------------------------
+
+USE GRAPH $GRAPH_NAME
+
+CREATE SCHEMA_CHANGE JOB init_schema FOR GRAPH $GRAPH_NAME {
+
+  ADD VERTEX Event (
+      PRIMARY_ID doc_id STRING,
+      title       STRING,
+      event_name  STRING,
+      sport       STRING,
+      games_id    STRING,
+      year        INT,
+      season      STRING,
+      venue       STRING,
+      date_raw    STRING,
+      date_norm   STRING,
+      competitors INT,
+      nations     INT,
+      win_value   STRING,
+      url         STRING
+  ) WITH primary_id_as_attribute="true";
+
+  ADD VERTEX Games (
+      PRIMARY_ID games_id STRING,
+      year   INT,
+      season STRING
+  ) WITH primary_id_as_attribute="true";
+
+  ADD VERTEX Sport (
+      PRIMARY_ID sport_id STRING,
+      name STRING
+  ) WITH primary_id_as_attribute="true";
+
+  ADD VERTEX Venue (
+      PRIMARY_ID venue_id STRING,
+      name STRING
+  ) WITH primary_id_as_attribute="true";
+
+  ADD VERTEX Athlete (
+      PRIMARY_ID athlete_id STRING,
+      name STRING
+  ) WITH primary_id_as_attribute="true";
+
+  ADD VERTEX Nation (
+      PRIMARY_ID noc STRING
+  ) WITH primary_id_as_attribute="true";
+
+  ADD VERTEX Document (
+      PRIMARY_ID doc_id STRING,
+      title STRING,
+      url   STRING,
+      kind  STRING
+  ) WITH primary_id_as_attribute="true";
+
+  ADD VERTEX Chunk (
+      PRIMARY_ID chunk_id STRING,
+      doc_id STRING,
+      title  STRING,
+      text   STRING
+  ) WITH primary_id_as_attribute="true";
+
+  // --- edges ---
+  ADD DIRECTED EDGE IN_SPORT  (FROM Event, TO Sport)  WITH REVERSE_EDGE="SPORT_OF";
+  ADD DIRECTED EDGE AT_GAMES  (FROM Event, TO Games)  WITH REVERSE_EDGE="GAMES_OF";
+  ADD DIRECTED EDGE HELD_AT   (FROM Event, TO Venue)  WITH REVERSE_EDGE="VENUE_OF";
+  ADD DIRECTED EDGE WON_MEDAL (FROM Event, TO Athlete, medal STRING, rank INT)
+      WITH REVERSE_EDGE="MEDAL_WON_BY";
+  ADD DIRECTED EDGE REPRESENTS (FROM Athlete, TO Nation) WITH REVERSE_EDGE="REPRESENTED_BY";
+  ADD DIRECTED EDGE PRECEDES  (FROM Games, TO Games)  WITH REVERSE_EDGE="FOLLOWS";
+  ADD DIRECTED EDGE EVIDENCE  (FROM Event, TO Document) WITH REVERSE_EDGE="EVIDENCE_FOR";
+  ADD DIRECTED EDGE HAS_CHUNK (FROM Document, TO Chunk) WITH REVERSE_EDGE="CHUNK_OF";
+}
+
+RUN SCHEMA_CHANGE JOB init_schema
+DROP JOB init_schema

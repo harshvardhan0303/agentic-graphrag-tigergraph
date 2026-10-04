@@ -1,0 +1,12 @@
+# Core (no heavy deps: the LLM client is plain urllib so token accounting is visible)
+numpy>=1.26
+
+# Vector store (local encoder; free, offline after first download)
+sentence-transformers>=3.0
+torch>=2.2
+
+# TigerGraph
+pyTigerGraph>=1.8
+
+# Dev / test
+pytest>=8.0

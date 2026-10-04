@@ -1,0 +1,9 @@
+// Vector index over chunk text (TigerGraph Vector DB, 4.2+).
+// Run separately and tolerantly: the syntax differs between builds, and the
+// graph layer — which is what the accuracy score depends on — must deploy
+// even if this does not. The RAG pipeline falls back to the local index.
+USE GRAPH $GRAPH_NAME
+
+CREATE VECTOR ATTRIBUTE chunk_emb FOR VERTEX Chunk (
+    DIMENSION=384, METRIC="COSINE", INDEXTYPE="HNSW"
+)

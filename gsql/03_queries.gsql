@@ -1,0 +1,144 @@
+// ---------------------------------------------------------------------------
+// Installed GSQL queries — the primitives the agent tool layer calls.
+//
+// Division of labour: GSQL does set selection, traversal and exact counting
+// (what a graph database is good at and an LLM is bad at). String
+// normalisation stays in Python (src/ingest/normalize.py) so there is exactly
+// one definition of it shared by ingestion, linking and scoring.
+//
+// Syntax note: these use GSQL **v1** pattern syntax (`FROM a:x -(EDGE:e)- b:y`).
+// Savanna's parser rejects that form under `SYNTAX v2`, which expects
+// `FROM (a:x)-[EDGE:e]->(b:y)`. v1 is the default and is what the simple
+// one-hop patterns here need; mixing the two is what produced
+// "specifies V2 syntax but uses V1 here" on the first deploy.
+//
+// Also avoided deliberately:
+//   * `count` as an identifier — it is reserved and fails to parse
+//   * CASE/IF inside ACCUM — support varies by build; two guarded SELECTs
+//     express the same thing portably
+// ---------------------------------------------------------------------------
+USE GRAPH $GRAPH_NAME
+
+// Every event of one sport at one Games. The workhorse: feeds aggregation,
+// superlative and any "all events of X" reasoning.
+CREATE OR REPLACE QUERY q_events_of_sport_games(STRING sport_id, STRING games_id)
+FOR GRAPH $GRAPH_NAME {
+  Seed = {Sport.*};
+  S = SELECT s FROM Seed:s WHERE s.sport_id == sport_id;
+  E = SELECT e FROM S:s -(SPORT_OF:x)- Event:e WHERE e.games_id == games_id;
+  PRINT E[E.doc_id, E.title, E.event_name, E.sport, E.games_id, E.year,
+          E.season, E.venue, E.date_raw, E.competitors, E.nations,
+          E.win_value, E.url] AS events;
+}
+
+// Exact aggregation, executed server-side. The comparison never reaches the
+// LLM, so the answer is exact and costs a constant number of tokens however
+// many events are involved. Missing values are stored as -1 and therefore
+// never satisfy a "greater than" test.
+CREATE OR REPLACE QUERY q_count_events_where(
+    STRING sport_id, STRING games_id, STRING field, INT threshold)
+FOR GRAPH $GRAPH_NAME {
+  SumAccum<INT> @@n_matched;
+  SumAccum<INT> @@n_considered;
+  SetAccum<STRING> @@evidence;
+  SetAccum<STRING> @@matched_docs;
+
+  Seed = {Sport.*};
+  S = SELECT s FROM Seed:s WHERE s.sport_id == sport_id;
+
+  Cand = SELECT e FROM S:s -(SPORT_OF:x)- Event:e
+         WHERE e.games_id == games_id
+         ACCUM @@n_considered += 1, @@evidence += e.doc_id;
+
+  MatchC = SELECT e FROM Cand:e
+           WHERE field == "competitors" AND e.competitors > threshold
+           ACCUM @@n_matched += 1, @@matched_docs += e.doc_id;
+
+  MatchN = SELECT e FROM Cand:e
+           WHERE field == "nations" AND e.nations > threshold
+           ACCUM @@n_matched += 1, @@matched_docs += e.doc_id;
+
+  PRINT @@n_matched AS matched, @@n_considered AS considered,
+        @@matched_docs AS matched_doc_ids, @@evidence AS evidence_doc_ids;
+}
+
+// Multi-hop anchor: venue + normalised date -> event.
+CREATE OR REPLACE QUERY q_events_by_venue_date(STRING venue_id, STRING date_norm)
+FOR GRAPH $GRAPH_NAME {
+  Seed = {Venue.*};
+  V = SELECT v FROM Seed:v WHERE v.venue_id == venue_id;
+  E = SELECT e FROM V:v -(VENUE_OF:x)- Event:e WHERE e.date_norm == date_norm;
+  PRINT E[E.doc_id, E.title, E.event_name, E.sport, E.games_id, E.year,
+          E.season, E.venue, E.date_raw, E.competitors, E.nations, E.url] AS events;
+}
+
+// Medal table for one event, IN TEAM ORDER.
+//
+// A GSQL vertex set is unordered, but a relay team's answer is the members
+// concatenated in their listed order ("Dani KingLaura TrottJoanna Rowsell").
+// The position lives on the WON_MEDAL edge as `rank`; a vertex-local
+// accumulator carries it onto the athlete so the client can sort by it.
+// Without this the right athletes come back in the wrong order.
+CREATE OR REPLACE QUERY q_medalists(STRING doc_id, STRING medal)
+FOR GRAPH $GRAPH_NAME {
+  SumAccum<INT> @rank_order;
+  Seed = {Event.*};
+  E = SELECT e FROM Seed:e WHERE e.doc_id == doc_id;
+  A = SELECT a FROM E:e -(WON_MEDAL:w)- Athlete:a
+      WHERE w.medal == medal
+      ACCUM a.@rank_order += w.rank;
+  PRINT A[A.athlete_id, A.name, A.@rank_order] AS medalists;
+}
+
+// Temporal hop: the Games immediately before this one, same season.
+CREATE OR REPLACE QUERY q_previous_games(STRING games_id)
+FOR GRAPH $GRAPH_NAME {
+  Seed = {Games.*};
+  G = SELECT g FROM Seed:g WHERE g.games_id == games_id;
+  P = SELECT p FROM G:g -(FOLLOWS:x)- Games:p;
+  PRINT P[P.games_id, P.year, P.season] AS previous;
+}
+
+// All events at a Games — used to find an event's counterpart at another Games.
+CREATE OR REPLACE QUERY q_events_of_games(STRING games_id)
+FOR GRAPH $GRAPH_NAME {
+  Seed = {Event.*};
+  E = SELECT e FROM Seed:e WHERE e.games_id == games_id;
+  PRINT E[E.doc_id, E.title, E.event_name, E.sport, E.games_id, E.year,
+          E.season, E.venue, E.date_raw, E.competitors, E.nations, E.url] AS events;
+}
+
+// Candidate pool for entity linking; token scoring happens in Python.
+CREATE OR REPLACE QUERY q_events_of_season(STRING season, INT max_year)
+FOR GRAPH $GRAPH_NAME {
+  Seed = {Event.*};
+  E = SELECT e FROM Seed:e WHERE e.season == season AND e.year <= max_year;
+  PRINT E[E.doc_id, E.title, E.event_name, E.sport, E.games_id,
+          E.year, E.season] AS events;
+}
+
+// Single event by id.
+CREATE OR REPLACE QUERY q_event_by_doc_id(STRING doc_id)
+FOR GRAPH $GRAPH_NAME {
+  Seed = {Event.*};
+  E = SELECT e FROM Seed:e WHERE e.doc_id == doc_id;
+  PRINT E[E.doc_id, E.title, E.event_name, E.sport, E.games_id, E.year,
+          E.season, E.venue, E.date_raw, E.competitors, E.nations,
+          E.win_value, E.url] AS events;
+}
+
+// Every event at a venue, no date filter. Used only as the fallback for
+// q_events_by_venue_date: infobox dates and question dates disagree on word
+// order and on ranges ("11-17 August"), so an exact date_norm match misses a
+// real event roughly one multi-hop question in three. The client re-filters
+// these rows on (month, day) -- see normalize.date_keys.
+CREATE OR REPLACE QUERY q_events_by_venue(STRING venue_id)
+FOR GRAPH $GRAPH_NAME {
+  Seed = {Venue.*};
+  V = SELECT v FROM Seed:v WHERE v.venue_id == venue_id;
+  E = SELECT e FROM V:v -(VENUE_OF:x)- Event:e;
+  PRINT E[E.doc_id, E.title, E.event_name, E.sport, E.games_id, E.year,
+          E.season, E.venue, E.date_raw, E.competitors, E.nations, E.url] AS events;
+}
+
+INSTALL QUERY ALL

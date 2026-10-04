@@ -1,0 +1,51 @@
+// ---------------------------------------------------------------------------
+// Loading job. Consumes the CSV tables emitted by src/ingest/parse_corpus.py.
+// Run with:  python -m src.graph.deploy --load
+// ---------------------------------------------------------------------------
+USE GRAPH $GRAPH_NAME
+
+CREATE LOADING JOB load_graph FOR GRAPH $GRAPH_NAME {
+
+  DEFINE FILENAME f_event    = "data/graph/event.csv";
+  DEFINE FILENAME f_games    = "data/graph/games.csv";
+  DEFINE FILENAME f_sport    = "data/graph/sport.csv";
+  DEFINE FILENAME f_venue    = "data/graph/venue.csv";
+  DEFINE FILENAME f_athlete  = "data/graph/athlete.csv";
+  DEFINE FILENAME f_nation   = "data/graph/nation.csv";
+  DEFINE FILENAME f_in_sport = "data/graph/e_in_sport.csv";
+  DEFINE FILENAME f_at_games = "data/graph/e_at_games.csv";
+  DEFINE FILENAME f_held_at  = "data/graph/e_held_at.csv";
+  DEFINE FILENAME f_medal    = "data/graph/e_medal.csv";
+  DEFINE FILENAME f_repr     = "data/graph/e_represents.csv";
+  DEFINE FILENAME f_precedes = "data/graph/e_precedes.csv";
+
+  LOAD f_event TO VERTEX Event VALUES (
+      $"doc_id", $"title", $"event_name", $"sport", $"games_id",
+      $"year", $"season", $"venue", $"date_raw", $"date_norm",
+      $"competitors", $"nations", $"win_value", $"url"
+  ) USING HEADER="true", SEPARATOR=",", QUOTE="double";
+
+  LOAD f_games   TO VERTEX Games   VALUES ($"games_id", $"year", $"season")
+      USING HEADER="true", SEPARATOR=",", QUOTE="double";
+  LOAD f_sport   TO VERTEX Sport   VALUES ($"sport_id", $"name")
+      USING HEADER="true", SEPARATOR=",", QUOTE="double";
+  LOAD f_venue   TO VERTEX Venue   VALUES ($"venue_id", $"name")
+      USING HEADER="true", SEPARATOR=",", QUOTE="double";
+  LOAD f_athlete TO VERTEX Athlete VALUES ($"athlete_id", $"name")
+      USING HEADER="true", SEPARATOR=",", QUOTE="double";
+  LOAD f_nation  TO VERTEX Nation  VALUES ($"noc")
+      USING HEADER="true", SEPARATOR=",", QUOTE="double";
+
+  LOAD f_in_sport TO EDGE IN_SPORT VALUES ($"doc_id", $"sport_id")
+      USING HEADER="true", SEPARATOR=",", QUOTE="double";
+  LOAD f_at_games TO EDGE AT_GAMES VALUES ($"doc_id", $"games_id")
+      USING HEADER="true", SEPARATOR=",", QUOTE="double";
+  LOAD f_held_at  TO EDGE HELD_AT  VALUES ($"doc_id", $"venue_id")
+      USING HEADER="true", SEPARATOR=",", QUOTE="double";
+  LOAD f_medal    TO EDGE WON_MEDAL VALUES ($"doc_id", $"athlete_id", $"medal", $"rank")
+      USING HEADER="true", SEPARATOR=",", QUOTE="double";
+  LOAD f_repr     TO EDGE REPRESENTS VALUES ($"athlete_id", $"noc")
+      USING HEADER="true", SEPARATOR=",", QUOTE="double";
+  LOAD f_precedes TO EDGE PRECEDES  VALUES ($"from_games", $"to_games")
+      USING HEADER="true", SEPARATOR=",", QUOTE="double";
+}

@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+.venv/
+
+# Secrets — NEVER commit. .env.example is the committed template.
+.env
+
+# Organisers' dataset: not ours to redistribute. The repo ships the code that
+# builds everything below from these three files; see README "Quick start".
+data/corpus.jsonl
+data/eval_*.jsonl
+data/graph/
+data/vectors/
+
+# Benchmark output. Intermediate trial runs are scratch, but the final public
+# run is committed on purpose: results.jsonl carries the full per-question
+# agent traces, which is the evidence for every claim the README makes and
+# lets a reviewer check them without a 20-minute run against their own API key.
+out/*
+!out/public/
+!out/hidden/
+!out/dashboard.html
+
+# Build scratch
+*.tar.gz
